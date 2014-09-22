@@ -222,6 +222,16 @@ App.QueryView = App.NestedView.extend({
                 .append(topRow)
                 .append(middleRow)
                 .append(bottomRow);
+            // Update title of query based on search term
+            that.$('.keyword-view-keywords').on('change keyup paste', function () {
+                console.log('updated');
+                console.log($(this).val());
+                if ($(this).val() !== '') {
+                    that.$('.query-title').text($(this).val());
+                } else {
+                    that.$('.query-title').text('Query');
+                }
+            });
         });
     },
     onCopyInput: function (evt) {
@@ -375,18 +385,21 @@ App.QueryListView = App.NestedView.extend({
         this.updateNumQueries(collection);
     },
     updateNumQueries: function (collection) {
-        if (collection.length == 1) {
-            this.$('.query-views').addClass('one');
-            this.$('.query-views').removeClass('two');
-        } else {
-            this.$('.query-views').addClass('two');
-            this.$('.query-views').removeClass('one');
-        }
-        this.$('.query-views .query-title').eq(0).addClass('first-query');
-        this.$('.query-views .query-title').eq(1)
-            .html('Comparison Query')
-            .removeClass('first-query')
-            .addClass('second-query');
+        var that = this;
+        // Query views may not be rendered yet, so defer
+        _.defer(function () {
+            if (collection.length == 1) {
+                that.$('.query-views').addClass('one');
+                that.$('.query-views').removeClass('two');
+            } else {
+                that.$('.query-views').addClass('two');
+                that.$('.query-views').removeClass('one');
+            }
+            that.$('.query-views .query-title').eq(0).addClass('first-query');
+            that.$('.query-views .query-title').eq(1)
+                .removeClass('first-query')
+                .addClass('second-query');
+        });
     }
 });
 
@@ -431,8 +444,6 @@ App.SimpleTagListView = App.NestedView.extend({
     template: _.template($('#tpl-simple-tag-list-view').html()),
     initialize: function (options) {
         App.debug('App.SimpleTagListView.initialize()');
-        App.debug(options);
-        App.debug(this.model);
         _.bindAll(this, 'onAdd');
         _.bindAll(this, 'onRemoveClick');
         this.disabled = options.disabled;
@@ -443,7 +454,6 @@ App.SimpleTagListView = App.NestedView.extend({
     },
     render: function () {
         App.debug('App.SimpleTagListView.render()');
-        App.debug(this.model);
         var that = this;
         this.$el.html(this.template());
         if (this.disabled) {
@@ -456,7 +466,10 @@ App.SimpleTagListView = App.NestedView.extend({
     onAdd: function (model, collection, options) {
         App.debug('App.SimpleTagListView.onAdd()');
         App.debug(model);
-        var itemView = new App.ItemView({model: model});
+        var itemView = new App.ItemView({
+            model: model
+            , display: function (m) { return m.get('tag_set_label') + ': ' + m.get('label'); }
+        });
         itemView.on('removeClick', this.onRemoveClick);
         this.$('.simple-tag-list-view-content').append(itemView.el);
     },
@@ -482,56 +495,54 @@ App.SimpleTagSelectView = App.NestedView.extend({
         var that = this;
         _.bindAll(this, 'onTextEntered');
         _.bindAll(this, 'onExplore');
-        this.mediaSources.deferred.done(function () {
-            that.render();
-            if (!that.disabled) {
-                App.debug('Creating typeahead');
-                $('.simple-tag-input', that.$el).typeahead(null, {
-                    name: 'tags',
-                    displayKey: 'name',
-                    source: that.mediaSources.get('tags').getSuggestions().ttAdapter()
-                });
-                // Listen to custom typeahead events
-                that.$('.simple-tag-input').bind(
-                    'typeahead:selected',
-                    function () { that.onTextEntered(); });
-                that.$('.simple-tag-input').bind(
-                    'typeahead:autocompleted',
-                    function () { that.onTextEntered(); });
-            }
-        });
+        that.render();
+        if (!that.disabled) {
+            App.debug('Creating typeahead');
+            $('.simple-tag-input', that.$el).typeahead(null, {
+                name: 'tags',
+                displayKey: function (d) { return d.tag_set_label + ': ' + d.label; },
+                source: that.mediaSources.get('tags').getRemoteSuggestionEngine().ttAdapter()
+            });
+            // Listen to custom typeahead events
+            that.$('.simple-tag-input').bind(
+                'typeahead:selected',
+                function (event, suggestion) { that.onTextEntered(event, suggestion); });
+        }
     },
     render: function () {
         App.debug('App.SimpleTagSelectView.render()');
         this.$el.html(this.template());
-        this.exploreView = new App.ExploreListView({
-            collection: this.mediaSources.get('tag_sets')
-            , ExploreView: App.TagSetExploreView
-        });
-        $('body').append(this.exploreView.el);
         if (this.disabled) {
             this.$('.simple-tag-input').attr('disabled', 'disabled');
             this.$('button').attr('disabled', 'disabled');
         }
     },
-    onTextEntered: function (event) {
+    onTextEntered: function (event, suggestion) {
         App.debug('App.SimpleTagSelectView.textEntered()');
         if (event) { event.preventDefault(); }
-        var name = $('.simple-tag-input.tt-input', this.$el).typeahead('val');
         $('.simple-tag-input.tt-input', this.$el).typeahead('val', '');
         var $el = this.$el;
         _.defer(function () {
             $('.simple-tag-input', $el).focus();
         });
-        source = this.mediaSources.get('tags').getByName(name);
-        if (source) {
-            this.model.get('tags').add(source);
-        }
+        this.model.get('tags').add(suggestion);
     },
     onExplore: function (event) {
         App.debug('App.SimpleTagSelectView.onExplore()');
         event.preventDefault();
-        this.exploreView.show();
+        var that = this;
+        this.mediaSources.get('tag_sets').fetch({
+            success: function () {
+                if (typeof(that.exploreView) === 'undefined') {
+                    that.exploreView = new App.ExploreListView({
+                        collection: that.mediaSources.get('tag_sets')
+                        , ExploreView: App.TagSetExploreView
+                    });
+                    $('body').append(that.exploreView.el);
+                }
+                that.exploreView.show();
+            }
+        });
     }
 });
 
@@ -551,57 +562,59 @@ App.MediaSelectView = App.NestedView.extend({
         var that = this;
         _.bindAll(this, 'onTextEntered');
         _.bindAll(this, 'onExplore');
-        this.mediaSources.deferred.done(function () {
-            that.render();
-            if (!that.disabled) {
-                App.debug('Creating typeahead');
-                $('.media-input', that.$el).typeahead(null, {
-                    name: 'sources',
-                    displayKey: 'name',
-                    source: that.mediaSources.get('sources').getSuggestions().ttAdapter()
-                });
-                // Listen to custom typeahead events
-                that.$('.media-input').bind(
-                    'typeahead:selected',
-                    function () { that.onTextEntered(); });
-                that.$('.media-input').bind(
-                    'typeahead:autocompleted',
-                    function () { that.onTextEntered(); });
-            }
-        });
+        that.render();
+        if (!that.disabled) {
+            App.debug('Creating typeahead');
+            $('.media-input', that.$el).typeahead(null, {
+                name: 'sources',
+                displayKey: 'name',
+                source: that.mediaSources.get('sources').getRemoteSuggestionEngine().ttAdapter(),
+            });
+            // Listen to custom typeahead events
+            that.$('.media-input').bind(
+                'typeahead:selected',
+                function (event, suggestion) { that.onTextEntered(event, suggestion); });
+//            that.$('.media-input').bind(
+//               'typeahead:autocompleted',
+//                function () { that.onTextEntered(); });
+        }
     },
     render: function () {
         App.debug('App.MediaSelectView.render()');
         this.$el.html(this.template());
-        this.exploreView = new App.ExploreListView({
-            collection: this.mediaSources.get('sources'),
-            ExploreView: App.SourceExploreView,
-            page: true
-        });
-        $('body').append(this.exploreView.el);
         if (this.disabled) {
             this.$('.media-input').attr('disabled', 'disabled');
             this.$('button').attr('disabled', 'disabled');
         }
     },
-    onTextEntered: function (event) {
+    onTextEntered: function (event, suggestion) {
         App.debug('App.MediaSelectView.textEntered()');
+        var that = this;
         if (event) { event.preventDefault(); }
-        var name = $('.media-input.tt-input', this.$el).typeahead('val');
         $('.media-input.tt-input', this.$el).typeahead('val', '');
         var $el = this.$el;
         _.defer(function () {
             $('.media-input', $el).focus();
         });
-        source = this.mediaSources.get('sources').nameToSource[name];
-        if (source) {
-            this.model.get('sources').add(source);
-        }
+        that.model.get('sources').add(suggestion);
     },
     onExplore: function (event) {
         App.debug('App.MediaSelectView.onExplore()');
         event.preventDefault();
-        this.exploreView.show();
+        var that = this;
+        this.mediaSources.get('sources').fetch({
+            success: function () {
+                if (typeof(that.exploreView) === 'undefined') {
+                    that.exploreView = new App.ExploreListView({
+                        collection: that.mediaSources.get('sources')
+                        , ExploreView: App.SourceExploreView
+                        , page: true
+                    });
+                    $('body').append(that.exploreView.el);
+                }
+                that.exploreView.show();
+            }
+        });
     }
 });
 
@@ -631,7 +644,9 @@ App.ItemView = Backbone.View.extend({
         this.$el.addClass('label');
         this.$el.addClass('label-default');
         var data = {}
-        if (this.display) {
+        if (this.display && typeof(this.display) === 'function') {
+            data.name = this.display(this.model);
+        } else if (this.dispaly) {
             data.name = this.model.get(this.display);
         } else {
             data.name = this.model.get('name');
@@ -651,8 +666,6 @@ App.MediaListView = App.NestedView.extend({
     template: _.template($('#tpl-media-list-view').html()),
     initialize: function (options) {
         App.debug('App.MediaListView.initialize()');
-        App.debug(options);
-        App.debug(this.model);
         _.bindAll(this, 'onAdd');
         _.bindAll(this, 'onRemoveClick');
         this.disabled = options.disabled;
@@ -663,7 +676,6 @@ App.MediaListView = App.NestedView.extend({
     },
     render: function () {
         App.debug('App.MediaListView.render()');
-        App.debug(this.model);
         var that = this;
         this.$el.html(this.template());
         if (this.disabled) {
@@ -676,7 +688,7 @@ App.MediaListView = App.NestedView.extend({
     onAdd: function (model, collection, options) {
         App.debug('App.MediaListView.onAdd()');
         App.debug(model);
-        var itemView = new App.ItemView({model: model});
+        var itemView = new App.ItemView({model: model, display: 'name' });
         itemView.on('removeClick', this.onRemoveClick);
         this.$('.media-list-view-content').append(itemView.el);
     },
@@ -730,7 +742,7 @@ App.DateRangeView = Backbone.View.extend({
                 that.onContentChange();
                 start.hide();
             }).on('keydown', function (event) {
-                if (e.keyCode == 9) {
+                if (event.keyCode == 9) {
                     start.hide();
                 }
             }).data('datepicker');
@@ -740,7 +752,7 @@ App.DateRangeView = Backbone.View.extend({
                 that.onContentChange();
                 end.hide();
             }).on('keydown', function (event) {
-                if (e.keyCode == 9) {
+                if (event.keyCode == 9) {
                     end.hide();
                 }
             }).data('datepicker');
@@ -766,6 +778,7 @@ App.KeywordView = Backbone.View.extend({
         App.debug('App.KeywordView.initialize()');
         App.debug(options);
         _.bindAll(this, 'contentChanged');
+        this.listenTo(this.model.get('params'), 'change', this.modelChanged);
         this.render();
     },
     render: function () {
@@ -782,6 +795,9 @@ App.KeywordView = Backbone.View.extend({
     },
     contentChanged: function () {
         this.model.get('params').set('keywords', this.$input.val());
+    },
+    modelChanged: function () {
+        this.$input.val(this.model.get('params').get('keywords'));
     }
 });
 
@@ -799,11 +815,14 @@ App.ExploreListView = Backbone.View.extend({
     name: 'ExploreListView',
     template: _.template($('#tpl-explore-list-view').html()),
     initialize: function (options) {
+        App.debug('App.ExploreListView.initialize()');
         this.ExploreView = options.ExploreView
         this.page = options.page;
+        var that = this;
         this.render();
     },
     render: function () {
+        App.debug('App.ExploreListView.render()');
         var that = this;
         this.$el.html(this.template());
         if (this.page) {
@@ -832,6 +851,7 @@ App.ExploreListView = Backbone.View.extend({
         this.$('.modal-body').append(v.el);
     },
     show: function () {
+        App.debug('App.ExploreListView.show()');
         var that = this;
         if (this.page) {
             if (typeof(this.currentPage) === 'undefined') {
@@ -848,7 +868,6 @@ App.ExploreListView = Backbone.View.extend({
     },
     showAll: function () {
         App.debug('App.ExploreListView.showAll()');
-        App.debug(this.collection);
         var that = this;
         this.$('.modal-body').html('');
         this.collection.each(function (m) {
@@ -856,6 +875,7 @@ App.ExploreListView = Backbone.View.extend({
         });
     },
     showPage: function (a) {
+        App.debug('App.ExploreListView.showPage()');
         var that = this;
         if (typeof(a) === 'undefined') {
             a = 'A';
@@ -895,3 +915,180 @@ App.QueryResultView = App.NestedView.extend({
         }
     }
 });
+
+App.ToolListView = Backbone.View.extend({
+    tagName: 'ul',
+    initialize: function (options) {
+        _.bindAll(this, 'render');
+        this.render();
+        this.listenTo(this.collection, 'execute', this.render);
+    },
+    render: function () {
+        App.debug('App.ToolListView.render()');
+        var path = '#' + this.collection.dashboardUrl();
+        this.$el.html('');
+        this.$el.append(
+            $('<li class="dashboard-color">').append(
+                $('<a>')
+                    .attr('href', 'https://dashboard.mediameter.org/' + path)
+                    .text('Dashboard')
+                )
+            );
+/*        this.$el.append(
+            $('<li class="mentions-color">').append(
+                $('<a>')
+                    .attr('href', 'https://mentions.mediameter.org/' + path)
+                    .text('Mentions')
+                )
+            );
+        this.$el.append(
+            $('<li class="frequency-color">').append(
+                $('<a>')
+                    .attr('href', 'https://frequency.mediameter.org/' + path)
+                    .text('Frequency')
+                )
+            );*/
+    }
+});
+
+// This simple helpers centralize adding download links to the action menu.  Use it as a mixin to any view that has
+// and action menu.
+App.ActionedViewMixin = {
+    _downloadUrlTemplate: _.template('<li class="action-download"><a class="<%=cssClass%> role="presentation" role="menuitem" href="<%=url%>"><%=text%></a></li>'),
+    hideActionMenu: function(){
+        this.$('.panel-heading button').hide();
+    },
+    showActionMenu: function(){
+        this.$('.panel-heading button').show();
+    },
+    addDownloadMenuItems: function(downloadUrls,title,cssClass){
+        if(App.con.userModel.get('authenticated')==false){ // public users can't download
+            return;
+        }
+        this.$('.panel-action-list li.action-download').remove();
+        for(idx in downloadUrls){
+            var text = "";
+            if(typeof title === "undefined"){
+                if(idx==0){
+                    name = '<span class="first-query">'+App.config.queryNames[0]+'</span>';
+                } else {
+                    name = '<span class="second-query">'+App.config.queryNames[1]+'</span>';
+                }
+                text = "Download "+name+" Data CSV";
+            } else {
+                text = title;
+            }
+            var element = this._downloadUrlTemplate({url:downloadUrls[idx],'text':text,'cssClass':cssClass});
+            this.$('.panel-action-list').append(element);  
+        }
+    }
+};
+
+App.AboutView = Backbone.View.extend({
+    name: 'AboutView',
+    initialize: function(options){
+        this.options = options;
+        this.template = _.template($(this.options['template']).html());
+        this.render();
+    },
+    render: function(){
+        this.$el.html(this.template());
+        this.$('.modal').modal('show');
+    }
+});
+
+// Single word cloud view
+App.WordCountResultView = Backbone.View.extend({
+    name: 'WordCountResultView',
+    config: {
+        minSize: 8,
+        maxSize: 48,
+        linkColor: "#428bca"
+    },
+    template: _.template($('#tpl-wordcount-result-view').html()),
+
+    initialize: function (options) {
+        if('clickable' in options){
+            this.clickable = options['clickable'];
+        } else {
+            this.clickable = true;
+        }
+        this.render();
+    },
+
+    render: function () {
+        App.debug('App.WordCountResultView.render()');
+        var wordcounts = this.collection;
+        this.$el.html(this.template());
+        var that = this;
+        // wait until end to get correct width
+        _.defer(function(){that.renderD3(wordcounts);});
+    },
+
+    renderD3: function (wordcounts) {
+        App.debug('App.WordCountResultView.renderD3()');
+        var that = this;
+        this.$('.wordcount-result-view-content')
+            .html('')
+            .css('padding', '0');
+        var width = this.$('.wordcount-result-view-content').width();
+        var height = 400;
+        var topWords = _.first(wordcounts.toJSON(), 100);
+        var counts = _.pluck(topWords, 'count');
+        var min = d3.min(counts);
+        var max = d3.max(counts);
+        var slope = this.config.maxSize / Math.log(max);
+        // get list of all words and sizes
+        wordList = [];
+        _.each(topWords, function (m) {
+                wordList.push({text: m['term'], size: slope * Math.log(m['count'])});
+            }
+        );
+        // create wordcloud
+        d3.layout.cloud().size([width, height])
+        .words(wordList)
+        .rotate(function() { return ~~(Math.random() * 1) * 90; })
+        .font("Arial")
+        .fontSize(function(d) { return d.size; })
+        .on("end", function (words) {
+            // Black and white
+            // var fill = d3.scale.linear().domain([0,100]).range(["black","white"]);
+            // Colors
+            var fill = d3.scale.category20();
+            var svg = d3.select(that.$('.wordcount-result-view-content')[0]).append('svg')
+            .attr('width', width).attr('height', height)    
+            .append("g")
+            .attr("transform", "translate("+width/2+","+height/2+")")
+            .selectAll("text")
+            .data(words)
+            .enter().append("text")
+            .attr("font-size", function(d) { return d.size + "px"; })
+            .attr("fill", App.config.queryColors[0])
+            .attr("text-anchor", "middle")
+            .attr('font-weight', 'bold')
+            .attr("transform", function(d) {
+                return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+            })
+            .text(function(d) { return d.text; });
+        })
+        .start();
+        if(that.clickable==true) {
+            d3.select(that.$('.wordcount-result-view-content')[0]).selectAll('text')
+                .on('mouseover', function () {
+                    d3.select(this).attr('fill', that.config.linkColor)
+                    .attr('cursor','pointer');
+                })
+                .on('mouseout', function () {
+                    color = App.config.queryColors[0];
+                    d3.select(this).attr('fill', color)
+                    .attr('cursor','default');
+                })
+                .on('click', function (d) {
+                    that.trigger('mm:refine', {
+                        term: d.text
+                    });
+                });
+        }
+    }
+});
+

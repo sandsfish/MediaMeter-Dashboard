@@ -74,6 +74,20 @@ body {
     position: relative;
     top: -0.33ex;
 }
+.branding h1 small {
+    margin-top: 50px;
+    font-size: 14px;
+    color: #ffffff;
+    vertical-align: baseline;
+    opacity: 0.5;
+}
+.branding h1 small a,
+.branding h1 small a:link,
+.branding h1 small a:visited,
+.branding h1 small a:hover,
+.branding h1 small a:active {
+    color: #ffffff;
+}
 .drawer {
     position: relative;
     z-index: 400;
@@ -102,15 +116,32 @@ body {
     color: #777;
 }
 
-.controls ul {
+
+.controls ul,
+.brand-toolbar .links ul {
     list-style: none;
     margin: 0;
-    float: right;
+    padding: 0;
     color: white;
 }
-.controls ul a {
+.brand-toolbar .controls ul {
+    float: right;
+}
+.controls ul a,
+.brand-toolbar .links ul a {
     color: white;
     text-decoration: none;
+}
+.brand-toolbar .links ul li {
+    display: block;
+    float: left;
+    padding-left: 1em;
+    padding-right: 1em;
+}
+.controls ul li {
+    display: block;
+    float: left;
+    margin-left: 2em;
 }
 
 .last-element {
@@ -281,3 +312,16 @@ input.form-control, select.form-control, textarea.form-control {
 .second-query {
     color: #249fc9;
 }
+
+/* Sub-Brand styles ***************************************************/
+
+.dashboard-color {
+    background-color: #e14c11;
+}
+.mentions-color {
+    background-color: #005826;
+}
+.frequency-color {
+    background-color: rgb(85,134,138);
+}
+

@@ -4,7 +4,7 @@
         <title>{% block branding_tool_name %}Skeleton{% endblock %} - MediaMeter</title>
         <link rel="stylesheet" type="text/css" href="static/core/lib/bootstrap/css/bootstrap.min.css"/>
         <link rel="stylesheet" type="text/css" href="static/core/lib/typeahead.js-bootstrap/typeahead.css">
-        <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Lato:300,700" type="text/css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:300,700" type="text/css">
         <link rel="stylesheet" type="text/css" href="static/core/mediameter.css"/>
         {% block stylesheets %}{% endblock %}
         {% include 'core/progress.html' %}
@@ -25,6 +25,9 @@
         {% include 'core/query_controls_view.html' %}
         {% include 'core/simple_tag_list_view.html' %}
         {% include 'core/simple_tag_select_view.html' %}
+        {% include 'core/wordcount_result_view.html' %}
+        {% include 'core/one_sentence_view.html' %}
+        {% include 'core/one_story_view.html' %}
         {% block backbone_templates %}{% endblock %}
     </head>
     <body>
@@ -46,6 +49,7 @@
                         {% block logo %}<img src="/static/core/img/mm-logo-65-orange.png" />{% endblock %}
                         <strong>Media Meter</strong>
                         {{ self.branding_tool_name() }}
+                        <small class="pull-right">Powered by <a href="http://mediacloud.org">Media Cloud</a></small>
                     </h1>
                     {% endblock %}
                 </div>
@@ -93,33 +97,38 @@ attention you think they deserved? Did the media talk about these topics in the
 way you want them to? Who set the narrative for the current breaking story?
                         </p>
                         <p>
-MediaMeter is a suite of tools built on top of the MediaCloud online news
-database. A number of tools make up the suite, all driven by a query you author
-to specify media sources, a date range, and some keywords.
+<a href="http://mediameter.org">MediaMeter</a> is a suite of tools built on top of the 
+<a href="http://mediacloud.org">Media Cloud</a> online news database. A number of tools 
+make up the suite, all driven by a query you author to specify media sources, a date range, 
+and some keywords.
                         </p>
                     </div>
                     <div class="col-sm-2 col-sm-offset-1">
                         <h3>Contact</h3>
-                        <p>
+<p>
 If you have feedback or questions, you can get in touch with us at
-<a href="mailto:mediameter@media.mit.edu">mediameter@media.mit.edu</a>
-                        </p>
+<a href="mailto:mediameter@media.mit.edu">mediameter@media.mit.edu</a>.
+</p>
+<p>
+Please enter any bugs or <a href="https://github.com/c4fcm/MediaMeter-Dashboard/issues">issues on GitHub</a>.
+</p>
                     </div>
                     <div class="col-sm-4 col-sm-offset-1">
-                        <h3><a href="http://civic.mit.edu"><img class="logo" src="static/core/img/civic.png"/></a></h3>
+                        <h3><a href="http://civic.mit.edu"><img class="img-responsive" src="static/core/img/civic.png"/></a></h3>
+                        <h3><a href="http://cyber.law.harvard.edu"><img class="img-responsive" src="static/core/img/berkman.png"/></a></h3>
                     </div>
                 </div>
                 {% endblock %}
             </div>
         </div>
-        <script type="text/javascript" src="static/core/lib/jquery/js/jquery-2.0.3.min.js"></script>
+        <script type="text/javascript" src="static/core/lib/jquery/js/jquery-2.1.1.min.js"></script>
         <script type="text/javascript" src="static/core/lib/jquery/js/jquery.cookie-1.4.1.js"></script>
-        <script type="text/javascript" src="static/core/lib/underscore/underscore-1.5.2-min.js"></script>
-        <script type="text/javascript" src="static/core/lib/backbone/backbone-1.1.0-min.js"></script>
+        <script type="text/javascript" src="static/core/lib/underscore/underscore-1.6.0-min.js"></script>
+        <script type="text/javascript" src="static/core/lib/backbone/backbone-1.1.2-min.js"></script>
         <script type="text/javascript" src="static/core/lib/bootstrap/js/bootstrap.min.js"></script>
         <script type="text/javascript" src="static/core/lib/typeahead/typeahead.bundle.min.js"></script>
         <script type="text/javascript" src="static/core/lib/datepicker/js/bootstrap-datepicker.js"></script>
-        <script type="text/javascript" src="static/core/lib/d3/js/d3-3.4.1-min.js"></script>
+        <script type="text/javascript" src="static/core/lib/d3/js/d3-3.4.11.min.js"></script>
         <script type="text/javascript" src="static/core/lib/d3-cloud/js/d3-cloud-civic.js"></script>
         <script type="text/javascript" src="static/core/app.js"></script>
         <script type="text/javascript" src="static/core/include/viewmanager.js"></script>

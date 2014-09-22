@@ -1,66 +1,178 @@
-
 App.SentenceView = Backbone.View.extend({
     name: 'SentenceView',
     template: _.template($('#tpl-sentence-view').html()),
+    sentenceTemplate: _.template($('#tpl-one-sentence-view').html()),
+    events: {
+        'click li.action-about > a': 'clickAbout'
+    },
     initialize: function (options) {
         this.render();
+    },
+    formatNumber: function(num){
+        var parts = num.toString().split(".");
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        return parts.join(".");
     },
     render: function () {
         var that = this;
         App.debug('App.SentenceView.render()');
         this.$el.html(this.template());
+        this.hideActionMenu();
         var $el = this.$('.sentence-view .copy');
         progress = _.template($('#tpl-progress').html());
         $el.html(progress());
-        this.collection.resources.on('sync:sentence', function (sentences) {
-            App.debug('App.SentenceView.sentenceCollection: sync');
-            // figure out the total sentence count
-            totalSentences = sentences.last(1)[0].get('totalSentences');
-            that.$('.count').html('(' + totalSentences + ' found)');
+        // only render both when >=2 queries
+        this.listenTo(this.collection.resources, 'resource:complete:sentence', function () {
             $el.html('');
-            // now list some of the sentences
-            _.each(sentences.last(10), function (m) {
-                var p = $('<p>').html('<em>' + m.media() + '</em> - ' + m.date() + ': ' 
-                    + '<a href="' + m.get('url') + '">' + m.escape('sentence') + '</a>'
-                    );
-                $el.append(p);
+            var query1Sentences = that.collection.at(0).get('results').get('sentences');
+            if (that.collection.length >= 2) {
+                q1TotalSentences = query1Sentences.last(1)[0].get('totalSentences');
+                $el.append('<h3 class="first-query">'+that.collection.at(0).get('params').get('keywords')+' ('+that.formatNumber(q1TotalSentences)+' found)</h3>');
+                that.addSentences(query1Sentences.last(10),that.sentenceTemplate,$el);
+                var query2Sentences = that.collection.models[1].get('results').get('sentences');
+                q2TotalSentences = query2Sentences.last(1)[0].get('totalSentences');
+                $el.append('<h3 class="second-query">'+that.collection.at(1).get('params').get('keywords')+' ('+that.formatNumber(q2TotalSentences)+' found)</h3>');
+                that.addSentences(query2Sentences.last(10),that.sentenceTemplate,$el);
+                that.$('.count').html('');
+            } else {
+                // figure out the total sentence count
+                totalSentences = query1Sentences.last(1)[0].get('totalSentences');
+                that.$('.count').html('(' + that.formatNumber(totalSentences) + ' found)');
+                // now list some of the sentences
+                that.addSentences(query1Sentences.last(10),that.sentenceTemplate,$el);                
+            }
+            // now that the query collection is filled in, add the download data links
+            var downloadUrls = that.collection.map(function(m) { 
+                return m.get('results').get('sentences').csvUrl();
             });
-        }, this);
+            // clean up and prep for display
+            that.addDownloadMenuItems(downloadUrls);
+            that.delegateEvents();
+            that.showActionMenu();
+        });
         this.collection.on('execute', function () {
             $el.html(progress());
         });
+        this.delegateEvents();
+    },
+    addSentences: function(sentences,template,element){
+        _.each(sentences, function (m) {
+            element.append( template({'sentence':m}) );
+        }, this);
+    },
+    clickAbout: function (evt) {
+        evt.preventDefault();
+        this.aboutView = new App.AboutView({
+            template: '#tpl-about-sentences-view'
+        });
+        $('body').append(this.aboutView.el);
     }
 });
+App.SentenceView = App.SentenceView.extend(App.ActionedViewMixin);
+
+App.StoryView = Backbone.View.extend({
+    name: 'StoryView',
+    storyTemplate: _.template($('#tpl-one-story-view').html()),
+    template: _.template($('#tpl-story-view').html()),
+    events: {
+        'click li.action-about > a': 'clickAbout'
+    },
+    initialize: function (options) {
+        this.render();
+    },
+    render: function () {
+        var that = this;
+        App.debug('App.StoryView.render()');
+        this.$el.html(this.template());
+        this.hideActionMenu();
+        var $el = this.$('.story-view .copy');
+        progress = _.template($('#tpl-progress').html());
+        $el.html(progress());
+        // render one of two lists
+        this.listenTo(this.collection.resources, 'resource:complete:story', function () {
+            $el.html('');
+            var query1Stories = that.collection.models[0].get('results').get('stories');
+            if (that.collection.length >= 2) {
+                // had main and comparison queries
+                $el.append('<h3 class="first-query">'+that.collection.at(0).get('params').get('keywords')+'</h3>');
+                that.addStories(query1Stories.last(10),that.storyTemplate,$el);
+                $el.append('<h3 class="second-query">'+that.collection.at(1).get('params').get('keywords')+'</h3>');
+                var query2Stories = that.collection.models[1].get('results').get('stories');
+                that.addStories(query2Stories.last(10),that.storyTemplate,$el);
+            } else {
+                // had just a main query
+                that.addStories(query1Stories.last(10),that.storyTemplate,$el);
+            }
+            // now that the query collection is filled in, add the download data links
+            var downloadUrls = that.collection.map(function(m) { 
+                return m.get('results').get('stories').csvUrl();
+            });
+            that.addDownloadMenuItems(downloadUrls);
+            // clean up and prep for display
+            that.delegateEvents();
+            that.showActionMenu();
+        });
+        this.collection.on('execute', function () {
+            $el.html(progress());
+        });
+        this.delegateEvents();
+    },
+    addStories: function(stories,template,element){
+        _.each(stories, function (m) {
+            element.append( template({'story':m}) );
+        }, this);
+    },
+    clickAbout: function (evt) {
+        evt.preventDefault();
+        this.aboutView = new App.AboutView({
+            template: '#tpl-about-stories-view'
+        });
+        $('body').append(this.aboutView.el);
+    }
+});
+App.StoryView = App.StoryView.extend(App.ActionedViewMixin);
 
 // Wrapper view for single word clouds and comparison word cloud
 App.WordCountView = App.NestedView.extend({
     name: 'WordCountView',
     template: _.template($('#tpl-wordcount-view').html()),
+    events: {
+        'click li.action-about > a': 'clickAbout',
+    },
     initialize: function (options) {
         this.resultViews = null;
         this.comparisonViews = null;
+        _.bindAll(this, 'clickSvg');
         this.render();
     },
     render: function () {
         App.debug('App.WordCountView.render()');
         var that = this;
         this.$el.html(this.template());
+        this.hideActionMenu();
         var $el = this.$('.panel-body');
         this.$('.wordcount-view .copy').html(_.template($('#tpl-progress').html())());
-        // render individual word clouds for each query
-        this.listenTo(this.collection.resources, 'sync:wordcount', function (model) {
-            if (that.collection.length < 2) {
-                that.renderWordCountResults(model);
-            }
-        });
-        // only render comparison when >=2 queries
+        // and render the right subview
         this.listenTo(this.collection.resources, 'resource:complete:wordcount', function () {
             that.$('.wordcount-view .copy').hide();
             if (that.collection.length >=2){
-                this.renderWordCountComparison(that.collection);
+                // only render comparison when >=2 queries
+                that.renderWordCountComparison(that.collection);
+            } else {
+                // render individual word clouds for each query
+                that.renderWordCountResults(that.collection.models[0].get('results').get('wordcounts'));
             }
-            App.debug('App.WordCountComparisonView() resource:complete ' + that.cid);
-            App.debug(that.collection);
+            // add in data download links
+            var downloadUrls = that.collection.map(function(m) { 
+                return m.get('results').get('wordcounts').csvUrl();
+            });
+            that.addDownloadMenuItems(downloadUrls);
+            // Add download SVG option
+            that.addDownloadMenuItems([''], 'Download as SVG', 'svg-download');
+            that.$('a.svg-download').on('click', that.clickSvg);
+            // and clean up and prep the UI
+            that.delegateEvents();
+            that.showActionMenu();
         });
         // Reset when the query executes
         this.listenTo(this.collection, 'execute', function () {
@@ -72,224 +184,261 @@ App.WordCountView = App.NestedView.extend({
     
     renderWordCountResults: function (wordcounts) {
         App.debug('App.WordCountView.renderWordCountResults()');
-        var wordCountResultView = new App.WordCountResultView(wordcounts);
+        var wordCountResultView = new App.WordCountResultView({'collection':wordcounts});
         this.addSubView(wordCountResultView);
         var $el = this.$('.viz');
         $el.append(wordCountResultView.$el);
+        this.listenTo(wordCountResultView, 'mm:refine', function (options) {
+            var model = this.collection.models[0];
+            model.refine.trigger('mm:refine', {
+                term: options.term
+                , queryCid: model.cid
+            });
+        });
     },
 
     renderWordCountComparison: function (collection) {
         App.debug('App.WordCountView.renderWordCountComparison()');
-        var wordCountComparisonView = new App.WordCountComparisonView(collection);
+        var wordCountComparisonView = new App.WordCountComparisonView({'collection':collection});
         this.addSubView(wordCountComparisonView);
         var $el = this.$('.viz');
         $el.append(wordCountComparisonView.$el);
+    },
+
+    clickAbout: function (evt) {
+        evt.preventDefault();
+        this.aboutView = new App.AboutView({
+            template: '#tpl-about-wordcount-view'
+        });
+        $('body').append(this.aboutView.el);
+    },
+
+    clickSvg: function (evt) {
+        evt.preventDefault();
+        var s = new XMLSerializer();
+        var data = s.serializeToString(this.$('svg').get(0));
+        this.$('.svg-download input[name="content"]').val(data);
+        this.$('.svg-download').submit();
     }
+    
 });
-
-// Single word cloud view
-App.WordCountResultView = Backbone.View.extend({
-    name: 'WordCountResultView',
-    config: {
-        minSize: 8,
-        maxSize: 48
-    },
-    template: _.template($('#tpl-wordcount-result-view').html()),
-
-    initialize: function (wordcounts) {
-        this.render(wordcounts);
-    },
-
-    render: function (wordcounts) {
-        App.debug('App.WordCountResultView.render()');
-        this.$el.html(this.template());
-        progress = _.template($('#tpl-progress').html());
-        this.$('.wordcount-result-view-content').html(progress());
-        var that = this;
-        // wait until end to get correct width
-        _.defer(function(){that.renderD3(wordcounts);});
-    },
-
-    renderD3: function (wordcounts) {
-        App.debug('App.WordCountResultView.renderD3()');
-        this.$('.wordcount-result-view-content')
-            .html('')
-            .css('padding', '0');
-        var width = this.$('.wordcount-result-view-content').width();
-        var height = 400;
-        var topWords = _.first(wordcounts.toJSON(), 100);
-        var counts = _.pluck(topWords, 'count');
-        var min = d3.min(counts);
-        var max = d3.max(counts);
-        var slope = this.config.maxSize / Math.log(max);
-        // get list of all words and sizes
-        wordList = [];
-        _.each(topWords, function (m) {
-                wordList.push({text: m['term'], size: slope * Math.log(m['count'])});
-            }
-        );
-        // create wordcloud
-        d3.layout.cloud().size([1000, 350])
-        .words(wordList)
-        .rotate(function() { return ~~(Math.random() * 1) * 90; })
-        .font("Arial")
-        .fontSize(function(d) { return d.size; })
-        .on("end", draw)
-        .start();
-
-        function draw(words) {
-            // Black and white
-            // var fill = d3.scale.linear().domain([0,100]).range(["black","white"]);
-            // Colors
-            var fill = d3.scale.category20();
-            var svg = d3.select('.wordcount-result-view-content').append('svg')
-            .attr('width', width).attr('height', height)    
-            .append("g")
-            .attr("transform", "translate(575,200)")
-            .selectAll("text")
-            .data(words)
-            .enter().append("text")
-            .style("font-size", function(d) { return d.size + "px"; })
-            .style("fill", App.config.queryColors[0])
-            .attr("text-anchor", "middle")
-            .attr('font-weight', 'bold')
-            .attr("transform", function(d) {
-                return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
-            })
-            .text(function(d) { return d.text; });
-        }     
-    }
-});
+App.WordCountView = App.WordCountView.extend(App.ActionedViewMixin);
 
 // View for comparison word cloud
 App.WordCountComparisonView = Backbone.View.extend({
     name: 'WordCountComparisonView',
     config: {
-        fontSize: {
-            minSize: 8
-            , maxSize: 48
-        }
+        // Use sizeRange() to read, might be dynamic in the future
+        sizeRange: { min: 10, max: 24 }
+        , height: 400
+        , padding: 10
+        , linkColor: "#428bca"
     },
 
     template: _.template($('#tpl-wordcount-comparison-view').html()),
     
-    initialize: function (collection) {
-        this.render(collection);
+    initialize: function () {
+        _.bindAll(this,'refineBothQueries');
+        this.render();
     },
-
-    render: function (collection) {
-        App.debug('App.WordCountComparisonView.render()');
-        this.$el.html(this.template());
-        progress = _.template($('#tpl-progress').html());
-        this.$('.panel-body').html(progress());
+    updateStats: function () {
+        var allLeft = this.collection.at(0).get('results').get('wordcounts').toJSON();
+        var allRight = this.collection.at(1).get('results').get('wordcounts').toJSON();
+        var countSel = function (d) { return d.count };
+        var leftSum = d3.sum(allLeft, countSel);
+        var rightSum = d3.sum(allRight, countSel);
+        var topLeft = _.first(allLeft, 100);
+        var topRight = _.first(allRight, 100);
+        // Normalize
+        _.each(topLeft, function (d) {
+            d.tfnorm = d.count / leftSum;
+        });
+        _.each(topRight, function (d) {
+            d.tfnorm = d.count / rightSum;
+        })
+        // Find L - R, L int R, R - L
+        var terms = {}
+        _.each(topLeft, function (d) {
+            terms[d.stem] = d;
+            terms[d.stem].left = true;
+        });
+        _.each(topRight, function (d) {
+            if (!terms[d.stem]) {
+                terms[d.stem] = d;
+            } else {
+                terms[d.stem].tfnorm = (terms[d.stem].count + d.count) / (leftSum + rightSum);
+            }
+            terms[d.stem].right = true;
+        });
+        this.left = _.filter(terms, function (d) { return d.left && !d.right; });
+        this.right = _.filter(terms, function (d) { return d.right && !d.left; });
+        this.center = _.filter(terms, function (d) { return d.left && d.right; });
+        this.center.sort(function (a, b) {
+            return b.tfnorm - a.tfnorm;
+        });
+        this.all = this.left.concat(this.right);
+        this.fullExtent = d3.extent(this.all, function (d) { return d.tfnorm; })
+    },
+    render: function () {
         var that = this;
-        _.defer(function(){that.renderD3(collection);});
+        this.updateStats();
+        this.$el.html(this.template());
+        this.$('.content-text').hide();
+        _.defer(function () { 
+            that.renderSvg();
+        });
     },
-
-    renderD3: function (collection) {
-        App.debug('App.WordCountComparisonView.renderD3()');
-        this.$('.wordcount-comparison-view-content')
-            .html('')
-            .css('padding', '0');
-        var width = this.$('.wordcount-comparison-view-content').width();
-        var height = 400;
-        // supports two queries
-        // TODO: Iterate through collections instead
-        var query1Words = collection.models[0].get('results').get('wordcounts');
-        var query2Words = collection.models[1].get('results').get('wordcounts');
-
-        var topWordsQuery1 = _.first(query1Words.toJSON(), 100);
-        var topWordsQuery2 = _.first(query2Words.toJSON(), 100);
-
-        var countsQuery1 = _.pluck(topWordsQuery1, 'count');
-        var countsQuery2 = _.pluck(topWordsQuery2, 'count');
-
-        var maxQuery1 = d3.max(countsQuery1);
-        var maxQuery2 = d3.max(countsQuery2);
-
-        var maxQuery = d3.max([maxQuery1,maxQuery2]);
-        var slope = this.config.fontSize.maxSize / Math.log(maxQuery);
-
-        // get list of all words and sizes
-        wordList1 = [];
-        wordList2 = [];
-        intersectionWordList = [];
-
-        var intersection = _.filter(topWordsQuery1, function(m){
-            return _.contains(_.pluck(topWordsQuery2, 'term'), m['term']); 
-        });
-
-        _.each(intersection, function (m) {
-            intersectionWordList.push({text: m['term'], color: 'black', query1Count: 0, query2Count: 0, size: 0});
-        });
-
-        _.each(topWordsQuery1, function (m) {
-            // if in the intersection, add to intersectionList
-            if (_.contains(_.pluck(intersection, 'term'), m['term'])){
-                wordObject = _.findWhere(intersectionWordList, {text: m['term']});
-                wordObject.query1Count = m['count'];
-                wordObject.size = slope * Math.log(wordObject.query1Count + wordObject.query2Count);
-            }
-            else{
-                // add to wordList1
-                wordList1.push({text: m['term'], color: '#e14c11', query1Count: m['count'], query2Count: 0, size: slope * Math.log(m['count'])});
-            }
-        });
-
-        _.each(topWordsQuery2, function (m) {
-            // if in the intersection, add to intersectionList
-            if (_.contains(_.pluck(intersection, 'term'), m['term'])){
-                wordObject = _.findWhere(intersectionWordList, {text: m['term']});
-                wordObject.query2Count = m['count'];
-                wordObject.size = slope * Math.log(wordObject.query1Count + wordObject.query2Count);
-            }
-            else{
-                // add to wordList2
-                wordList2.push({text: m['term'], color: '#249fc9', query1Count: 0, query2Count: m['count'], size: slope * Math.log(m['count'])});
-            }
-        });
-
-        wordsList = wordList1.concat(wordList2).concat(intersectionWordList)
-
-        function getColor(d){
-            var total = d.query1Count + d.query2Count;
-            colorFill = -1*d.query1Count/total + 1*d.query2Count/total;
-            return colorFill;
+    sizeRange: function () {
+        return _.clone(this.config.sizeRange);
+    },
+    fontSize: function (term, extent, sizeRange) {
+        if (typeof(sizeRange) === 'undefined') {
+            sizeRange = this.sizeRange();
         }
-
-        var fill = d3.scale.linear()
-                .domain([-1, 1])
-                .range(["orange", "orchid"]);  
-        d3.layout.cloud().size([1000, 350])
-        .words(wordsList)
-        .rotate(function() { return ~~(Math.random() * 1) * 90; })
-        .font("Arial")
-        .fontSize(function(d) {return d.size; })
-        // Gradient color
-        // .fontColor(function(d) {return fill(getColor(d)); })
-        // Separate colors
-        .fontColor(function(d) {return d.color; })
-        .on("end", draw)
-        .start();
-
-        function draw(words) {
-            // var fill = d3.scale.category20();
-            var svg = d3.select('.wordcount-comparison-view-content').append('svg')
-            .attr('width', width).attr('height', height)    
-            .append("g")
-            .attr("transform", "translate(575,200)")
-            .selectAll("text")
-            .data(words)
-            .enter().append("text")
-            .style("font-size", function(d) { return d.size + "px"; })
-            .style("font-weight", 'bold')
-            .style("fill", function(d) { return d.fontColor; })
-            .attr("text-anchor", "middle")
-            .attr("transform", function(d) {
-                return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+        var size = sizeRange.min
+            + (sizeRange.max - sizeRange.min)
+                * ( Math.log(term.tfnorm) - Math.log(extent[0]) ) / ( Math.log(extent[1]) - Math.log(extent[0]) );
+        return size;
+    },
+    termText: function(d){
+        return d.term + d.count + ' ';
+    },
+    renderHtml: function () {
+        var that = this;
+        var container = d3.select(this.el).select('.content-text');
+        container.append('h3').text('Main');
+        container.append('div').selectAll('.left')
+            .data(this.left, function (d) { return d.stem; })
+            .enter()
+                .append('span').classed('left', true)
+                .style('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent) + 'px';
+                })
+                .style('font-weight', 'bold')
+                .text(this.termText);
+        container.append('h3').text('Intersection');
+        container.append('div').selectAll('.intersection')
+            .data(this.center, function (d) { return d.stem; })
+            .enter()
+                .append('span').classed('intersection', true)
+                .style('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent) + 'px';
+                })
+                .style('font-weight', 'bold')
+                .text(this.termText);
+        container.append('h3').text('Comparison');
+        container.append('div').selectAll('.right')
+            .data(this.right, function (d) { return d.stem; })
+            .enter()
+                .append('span').classed('right', true)
+                .style('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent) + 'px';
+                })
+                .style('font-weight', 'bold')
+                .text(this.termText);
+    },
+    renderSvg: function () {
+        var that = this;
+        var container = d3.select(this.el).select('.content-viz');
+        var width = this.$('.content-viz').width();
+        var innerWidth = width/3.0 - 2*this.config.padding;
+        var svg = container.append('svg')
+            .attr('height', this.config.height)
+            .attr('width', width);
+        var leftGroup = svg.append('g').classed('left-group', true)
+            .attr('transform', 'translate('+this.config.padding+')');
+        var intersectGroup = svg.append('g').classed('intersect-group', true)
+            .attr('transform', 'translate('+(innerWidth+this.config.padding)+')');
+        var rightGroup = svg.append('g').classed('right-group', true)
+            .attr('transform', 'translate('+(2.0*innerWidth+this.config.padding)+')');
+        var y = this.config.height;
+        var sizeRange = this.sizeRange();
+        var leftWords, rightWords, intersectWords;
+        while (y >= this.config.height && sizeRange.max > sizeRange.min) {
+            // Create words
+            leftWords = leftGroup.selectAll('.word')
+                .data(this.left, function (d) { return d.stem; });
+            leftWords.enter()
+                .append('text').classed('word', true).classed('left', true)
+                .attr('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent, sizeRange); });
+            rightWords = rightGroup.selectAll('.word')
+                .data(this.right, function (d) { return d.stem; });
+            rightWords.enter()
+                .append('text').classed('word', true).classed('right', true)
+                .attr('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent, sizeRange); });
+            intersectWords = intersectGroup.selectAll('.word')
+                .data(this.center, function (d) { return d.stem; });
+            intersectWords.enter()
+                .append('text').classed('word', true).classed('intersect', true)
+                .attr('font-size', function (d) {
+                    return that.fontSize(d, that.fullExtent, sizeRange); });
+            d3.selectAll('.word')
+                .text(function (d) { return d.term; })
+                .attr('font-weight', 'bold');
+            d3.selectAll('.left.word')
+                .attr('fill', App.config.queryColors[0]);
+            d3.selectAll('.right.word')
+                .attr('fill', App.config.queryColors[1]);
+            // Layout
+            y = 0;
+            y = Math.max(y, this.listCloudLayout(leftWords, innerWidth, this.fullExtent, sizeRange));
+            y = Math.max(y, this.listCloudLayout(intersectWords, innerWidth, this.fullExtent, sizeRange));
+            y = Math.max(y, this.listCloudLayout(rightWords, innerWidth, this.fullExtent, sizeRange));
+            sizeRange.max = sizeRange.max - 1;
+        }
+        d3.selectAll('.word')
+            .on('mouseover', function () {
+                d3.select(this).attr('fill', that.config.linkColor)
+                .attr('cursor','pointer');
             })
-            .text(function(d) { return d.text; });
-        }     
+            .on('mouseout', function () {
+                var color = '#000';
+                if (d3.select(this).classed('left')) {
+                    color = App.config.queryColors[0];
+                }
+                if (d3.select(this).classed('right')) {
+                    color = App.config.queryColors[1];
+                }
+                d3.select(this).attr('fill', color)
+                .attr('cursor','default');
+            });
+        d3.selectAll('.left.word')
+            .on('click', this.refineBothQueries);
+        d3.selectAll('.right.word')
+            .on('click', this.refineBothQueries);
+        d3.selectAll('.intersect.word')
+            .on('click', this.refineBothQueries);
+    },
+    refineBothQueries: function(d){
+        this.collection.refine.trigger('mm:refine', [
+            {term: d.term, query: 0},{term: d.term, query: 1}
+        ]);
+    },
+    listCloudLayout: function (words, width, extent, sizeRange) {
+        var that = this;
+        var x = 0;
+        words.attr('x', function (d) {
+            var textLength = this.getComputedTextLength();
+            var fs = that.fontSize(d, extent, sizeRange);
+            var lastX = x;
+            if (x + textLength + that.config.padding > width) {
+                lastX = 0;
+            }
+            x = lastX + textLength + 0.3*fs;
+            return lastX;
+        });
+        var y = 0;
+        var lastAdded = 0;
+        words.attr('y', function (d) {
+            if (d3.select(this).attr('x') == 0) {
+                y += 1.5 * that.fontSize(d, extent, sizeRange);
+                lastAdded = 1.5 * that.fontSize(d, extent, sizeRange);
+            }
+            return y;
+        });
+        return y + lastAdded;
     }
 });
 
@@ -327,70 +476,142 @@ App.HistogramView = Backbone.View.extend({
         axisColor: '#ddd'
     },
     template: _.template($('#tpl-histogram-view').html()),
+    events: {
+        'click li.action-about > a' : 'clickAbout'
+    },
     initialize: function (options) {
         App.debug('App.HistogramView.initialize()');
-        _.bindAll(this, 'dayFillColor');
         this.render();
-    },
-    demoDownloadCsvUrls: function() {
-        var keywords = JSON.parse(this.collection.keywords());
-        var urls = [];
-        for(idx in keywords){
-            urls.push(['/api', 'demo', 'sentences', 'numfound'
-                    , encodeURIComponent(JSON.stringify(keywords[idx]))
-                    , 'csv'
-                ].join('/')
-            );
-        }
-        return urls;
-    },
-    downloadCsvUrls: function() {
-        var keywords = JSON.parse(this.collection.keywords());
-        var media = JSON.parse(this.collection.media());
-        var start = JSON.parse(this.collection.start());
-        var end = JSON.parse(this.collection.end());
-        var urls = [];
-        for(idx in keywords){
-            urls.push(['/api', 'sentences', 'numfound'
-                    , encodeURIComponent(keywords[idx])
-                    , encodeURIComponent(JSON.stringify(media[idx]))
-                    , encodeURIComponent(start[idx])
-                    , encodeURIComponent(end[idx])
-                    , 'csv'
-                ].join('/')
-            );
-        }
-        return urls;
+        _.bindAll(this, 'dayFillColor');
     },
     render: function () {
         App.debug('App.HistogramView.render()');
         this.$el.html(this.template());
+        this.hideActionMenu();
         progress = _.template($('#tpl-progress').html());
         this.$('.copy').html(progress());
         this.$('.viz').hide();
         // TODO allow for multiple results
-        this.collection.resources.on('resource:complete:datecount', this.renderD3, this);
+        //this.collection.resources.on('resource:complete:datecount', this.renderD3, this);
+        this.collection.resources.on('resource:complete:datecount', this.renderViz, this);
         this.listenTo(this.collection, 'execute', function () {
             this.$('.copy').html(progress()).show();
             this.$('.viz').html('');
         }, this);
+        this.listenTo(
+            this.collection.subqueryResources,
+            'resource:complete:wordcount',
+            this.onSubqueryWordcounts
+        );
+    },
+    renderViz: function () {
+        App.debug('App.HistogramView.renderViz');
+        // draw the chart
+        this.renderHighChart();
+        // now that the query collection is filled in, add the download data links
+        var downloadUrls = this.collection.map(function(m) { 
+            return m.get('results').get('datecounts').csvUrl();
+        });
+        this.addDownloadMenuItems(downloadUrls);
+        // register an about click handler
+        this.delegateEvents();  // gotta run this to register the events again
+        this.showActionMenu();
+    },
+    renderHighChart: function() {
+        App.debug('App.HistogramView.renderHighChart');
+        var that = this;
+        var datasets = this.collection.map(function (queryModel) {
+            return queryModel.get('results').get('datecounts').toJSON();
+        });
+        // set up the html container
+        this.$('.copy').hide();
+        this.$('.viz')
+            .html('')
+            .css('padding', '0')
+            .show();
+        // figure out the xAxis labels
+        var dates = _.map(datasets[0], function(item){ return item.dateObj; });
+        // generate the series
+        var allSeries = [];
+        _.each(datasets, function(item,idx){
+            allSeries.push({
+                id: idx,
+                name: that.collection.at(idx).get('params').get('keywords'),
+                color: App.config.queryColors[idx],
+                data: _.map(item, function(d){ return d.numFound; }),
+                pointStart: item[0].dateObj.getTime(),
+                pointInterval: item[1].dateObj.getTime() - item[0].dateObj.getTime()
+            });
+        });
+        var showLineMarkers = (allSeries[0].data.length < 30);   // don't show dots on line if more than N data points
+        // set it all up 
+        this.$('.viz').highcharts({
+            title: {
+                text: ''
+            },
+            chart: {
+                type: 'spline',
+                height: '180',
+                zoomType: 'x'
+            },
+            plotOptions: {
+                series: {
+                    marker: {
+                        enabled: showLineMarkers
+                    },
+                    point: {
+                        events: {
+                            click: function (event) {
+                                var date =Highcharts.dateFormat(
+                                    '%Y-%m-%d'
+                                    , this.x
+                                );
+                                var result = that.collection.at(this.series._i);
+                                var attributes = {
+                                    start: date
+                                    , end: date
+                                };
+                                result.subqueryListener.trigger('mm:subquery', {
+                                    queryCid: result.cid
+                                    , attributes: attributes
+                                });
+                            }
+                        }
+                    }
+                }
+            },
+            xAxis: {
+                type: 'datetime',
+                dateTimeLabelFormats: {
+                    millisecond: '%m/%e/%y',
+                    second: '%m/%e/%y',
+                    minute: '%m/%e/%y',
+                    hour: '%m/%e/%y',
+                    day: '%m/%e/%y',
+                    week: '%m/%e/%y',
+                    month: '%m/%y',
+                    year: '%Y'
+                }
+            },
+            yAxis: {
+                min: 0,
+                title: {
+                    text: 'Sentences'
+                }
+            },
+            series: allSeries
+        });
     },
     renderD3: function () {
         App.debug('App.HistogramView.renderD3()');
+        // register an about click handler
+        this.delegateEvents();  // gotta run this to register the events again
+        this.showActionMenu();
         // now that the query collection is filled in, add the download data links
-        var downloadUrls = null;
-        if (App.con.userModel.get('anonymous')==true){
-            downloadUrls = this.demoDownloadCsvUrls();
-        } else {
-            downloadUrls = this.downloadCsvUrls();
-        }
-        var urlTemplate = _.template("<li><a target=\"_blank\" href=\"<%=url%>\"><%=text%></a></li>");
-        this.$('.panel-action-list').html('');
-        for(idx in downloadUrls){
-            title = (idx==0) ? "<span class=\"first-query\">Main</span>" : "<span class=\"second-query\">Comparison</span>"
-            var element = urlTemplate({url:downloadUrls[idx],'text':"Download "+title+" Data CSV"});
-            this.$('.panel-action-list').append(element);  
-        }
+        var downloadUrls = this.collection.map(function(m) { 
+            return m.get('results').get('datecounts').csvUrl();
+        });
+        this.addDownloadMenuItems(downloadUrls);
         var that = this;
         // Prepare javascript object and date array
         this.allLayersData = this.collection.map(function (queryModel) {
@@ -484,7 +705,7 @@ App.HistogramView = Backbone.View.extend({
             .enter()
                 .append('text').classed('label-year', true)
                     .text(function (d) { return d.getUTCFullYear(); })
-                    .attr('x', this.x)
+                    .attr('x', function (d) { return that.x(that.toDateString(d)); })
                     .attr('y', this.chartHeight - this.config.yearSize - 1)
                     .attr('dy', '1em')
                     .attr('font-size', this.config.yearSize)
@@ -592,8 +813,22 @@ App.HistogramView = Backbone.View.extend({
     labelAnchor: function (d) {
         var x = this.x(d.date);
         return x < this.chartWidth / 2.0 ? 'beginning' : 'end';
+    },
+    clickAbout: function (evt) {
+        evt.preventDefault();
+        this.aboutView = new App.AboutView({
+            template: '#tpl-about-histogram-view'
+        });
+        $('body').append(this.aboutView.el);
+    },
+    onSubqueryWordcounts: function () {
+        this.$('.viz .subquery').remove();
+        wordcounts = this.collection.subquery.get('results').get('wordcounts');
+        subqueryView = new App.WordCountResultView({collection:wordcounts});
+        subqueryView.$el.addClass('subquery').appendTo(this.$('.viz'));
     }
 });
+App.HistogramView = App.HistogramView.extend(App.ActionedViewMixin);
 
 App.QueryResultView = App.NestedView.extend({
     name: 'QueryResultView',
@@ -603,10 +838,14 @@ App.QueryResultView = App.NestedView.extend({
         App.debug('App.QueryResultView.initialize():' + this.cid);
         this.histogramView = new App.HistogramView(options);
         this.wordCountView = new App.WordCountView(options);
-        this.sentenceView = new App.SentenceView(options);
+        if(App.con.userModel.canListSentences()){
+            this.mentionsView = new App.SentenceView(options);
+        } else {
+            this.mentionsView = new App.StoryView(options);
+        }
         this.addSubView(this.histogramView);
         this.addSubView(this.wordCountView);
-        this.addSubView(this.sentenceView);
+        this.addSubView(this.mentionsView);
         this.render();
     },
     render: function () {
@@ -614,6 +853,6 @@ App.QueryResultView = App.NestedView.extend({
         this.$el.html('');
         this.$el.append(this.histogramView.$el);
         this.$el.append(this.wordCountView.$el);
-        this.$el.append(this.sentenceView.$el);
+        this.$el.append(this.mentionsView.$el);
     }
 });

@@ -3,14 +3,21 @@ App.con = App.Controller = {
     initialize: function () {
         App.debug('App.Controller.initialize()');
         App.instance = this;
+        // Set up error handling
+        $( document ).ajaxError(App.Controller.onAjaxError);
         // Create models
         App.con.userModel = new App.UserModel();
         App.con.mediaSources = new App.MediaModel({parse:true});
+        App.con.queryCollection = new App.QueryCollection();
         // Create view manager and app-level views
         App.con.vm = new App.ViewManager({
             "selector": '.content .container'
         });
         App.con.controlsView = new App.ControlsView({ userModel: App.con.userModel });
+        App.con.toolView = new App.ToolListView({
+            collection:App.con.queryCollection
+        });
+        $('.brand-toolbar .links').append(App.con.toolView.el);
         $('.controls').append(App.con.controlsView.el);
         App.con.router = new App.Router();
         // Bind event handlers
@@ -27,19 +34,17 @@ App.con = App.Controller = {
         });
     },
     
+    onAjaxError: function(event, jqxhr, settings, thrownError) {
+        var responseJson = $.parseJSON(jqxhr.responseText);
+        var errorMsg = 'Sorry, we had an error!';
+        if('error' in responseJson){
+            errorMsg = responseJson['error'];
+        }
+        alert(errorMsg);
+    },
+
     onSignIn: function () {
         App.debug('App.Controller.onSignIn()');
-        if (App.con.mediaSources.get('sources').length == 0) {
-            $.ajax('/static/core/data/media.json', {
-                "dataType": "json",
-                "success": function (data) {
-                    App.debug('Received media json:');
-                    App.con.mediaSources.set(App.con.mediaSources.parse(data));
-                    App.con.mediaSources.trigger('sync');
-                    App.con.mediaSourceData = data;
-                }
-            })
-        }
         App.con.router.navigate('', true);
     },
     
@@ -84,13 +89,11 @@ App.con = App.Controller = {
         }
         // Defaults media
         App.con.mediaModel = new App.MediaModel();
-        App.con.mediaSources.deferred.then(function () {
-            App.debug('Adding default media');
-            //var tagSet = App.con.mediaSources.get('tag_sets').get(5).cloneEmpty();
-            //tagSet.get('tags').add(App.con.mediaSources.get('tag_sets').get(5).get('tags').get(8875027).clone());
-            //App.con.mediaModel.get('tag_sets').add(tagSet);
-            var tag = App.con.mediaSources.get('tags').get(8875027).clone();
-            App.con.mediaModel.get('tags').add(tag);
+        //var tagSet = App.con.mediaSources.get('tag_sets').get(5).cloneEmpty();
+        //tagSet.get('tags').add(App.con.mediaSources.get('tag_sets').get(5).get('tags').get(8875027).clone());
+        //App.con.mediaModel.get('tag_sets').add(tagSet);
+        App.con.mediaSources.get('tags').getDeferred(8875027).then(function (m) {
+            App.con.mediaModel.get('tags').add(m);
         });
         // Default tags
         // Defaults dates
@@ -108,11 +111,7 @@ App.con = App.Controller = {
             mediaSources: App.con.mediaSources
             , parse: true
         };
-        if (!App.con.queryCollection) {
-            App.con.queryCollection = new App.QueryCollection();
-        } else {
-            App.con.queryCollection.reset();
-        }
+        App.con.queryCollection.reset();
         App.con.queryModel = new App.QueryModel(attributes, options);
         App.con.queryCollection.add(App.con.queryModel);
         App.con.queryListView = App.con.vm.getView(
@@ -193,5 +192,53 @@ App.con = App.Controller = {
     
     routeQuery: function (keywords, media, start, end) {
         App.debug('Route: query ------------------------------------------------------------------------------------------------------------------------');
+        keywordList = $.parseJSON(keywords);
+        startList = $.parseJSON(start);
+        endList = $.parseJSON(end);
+        if (!App.con.userModel.get('authenticated')) {
+            App.con.router.navigate('login', true);
+            return;
+        }
+        // Create query collection
+        App.con.queryCollection.reset();
+        // Load media
+        App.con.mediaSources.getDeferred(JSON.parse(media)).then(function() {
+            // Add a media model for each query
+            // TODO this should really happen in MediaCollection/MediaModel
+            _.each($.parseJSON(media), function (d, i) {
+                var mediaModel = new App.MediaModel();
+                var queryModel = new App.QueryModel({
+                    keywords: keywordList[i]
+                    , mediaModel: mediaModel
+                    , start: startList[i]
+                    , end: endList[i]
+                }, {
+                    mediaSources: App.con.mediaSources
+                    , parse: true
+                });
+                App.con.queryCollection.add(queryModel);
+                var subset = App.con.mediaSources.subset(d);
+                subset.get('sources').each(function (m) {
+                    mediaModel.get('sources').add(m);
+                });
+                subset.get('tags').each(function(simpleTag){
+                    mediaModel.get('tags').add(simpleTag);
+                });
+                subset.get('tag_sets').each(function (m) {
+                    mediaModel.get('tag_sets').add(m);
+                });
+            });
+            App.con.queryCollection.execute();
+            App.con.queryListView = App.con.vm.getView(
+                App.QueryListView
+                , {
+                    collection: App.con.queryCollection
+                    , mediaSources: App.con.mediaSources
+                }
+            );
+            App.con.queryCollection.on('execute', App.con.onQuery, App.con);
+            App.con.queryCollection.on('add', App.con.onQueryAdd, App.con);
+            App.con.showResults(App.con.queryCollection);
+        });
     }
 };

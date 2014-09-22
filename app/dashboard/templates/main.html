@@ -2,11 +2,15 @@
 
 {% block branding_tool_name %}Dashboard{% endblock %}
 
+{% block logo %}<a href="http://dashboard.mediameter.org/"><img src="/static/core/img/mm-logo-65-orange.png" /></a>{% endblock %}
+
 {% block stylesheets %}
     <link rel="stylesheet" type="text/css" href="static/dashboard/style.css"/>
 {% endblock %}
 
 {% block scripts %}
+    <script type="text/javascript" src="static/dashboard/highcharts-4.0.3/highcharts.js"></script>
+    <script type="text/javascript" src="static/dashboard/highcharts-4.0.3/exporting.js"></script>
     <script type="text/javascript" src="static/dashboard/views.js"></script>
     <script type="text/javascript" src="static/dashboard/controller.js"></script>
     <script type="text/javascript" src="static/dashboard/routes.js"></script>
@@ -14,9 +18,13 @@
 {% endblock %}
 
 {% block backbone_templates %}
+    {% include 'dashboard/about_histogram_view.html' %}
+    {% include 'dashboard/about_wordcount_view.html' %}
+    {% include 'dashboard/about_sentences_view.html' %}
+    {% include 'dashboard/about_stories_view.html' %}
     {% include 'dashboard/sentence_view.html' %}
+    {% include 'dashboard/story_view.html' %}
     {% include 'dashboard/histogram_view.html' %}
     {% include 'dashboard/wordcount_view.html' %}
-    {% include 'dashboard/wordcount_result_view.html' %}
     {% include 'dashboard/wordcount_comparison_view.html' %}
 {% endblock %}
